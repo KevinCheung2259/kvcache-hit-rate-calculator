@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KVCache 命中率计算器</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 KVCache 命中率计算器</h1>
+            <p>用于计算LLM推理服务中KVCache的理论命中率</p>
+        </header>
+
+        <div class="main-content">
+            <div class="input-section">
+                <h2>📊 模型配置</h2>
+                <div class="form-group">
+                    <label for="num-layers">模型层数:</label>
+                    <input type="number" id="num-layers" value="32" min="1" max="200">
+                    <span class="tooltip">模型的Transformer层数</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="num-kv-heads">Key-Value头数:</label>
+                    <input type="number" id="num-kv-heads" value="32" min="1" max="128">
+                    <span class="tooltip">注意力机制中KV头的数量</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="head-dim">头维度:</label>
+                    <input type="number" id="head-dim" value="128" min="32" max="512">
+                    <span class="tooltip">每个注意力头的维度</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="model-dtype">模型数据类型:</label>
+                    <select id="model-dtype">
+                        <option value="fp16">FP16</option>
+                        <option value="fp32">FP32</option>
+                        <option value="bf16">BF16</option>
+                        <option value="fp8">FP8</option>
+                        <option value="int8">INT8</option>
+                        <option value="int4">INT4</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="kvcache-dtype">KVCache数据类型:</label>
+                    <select id="kvcache-dtype">
+                        <option value="fp16">FP16</option>
+                        <option value="fp32">FP32</option>
+                        <option value="bf16">BF16</option>
+                        <option value="fp8">FP8</option>
+                        <option value="int8">INT8</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="num-params">模型参数数量 (亿):</label>
+                    <input type="number" id="num-params" value="7" step="0.1" min="0.1" max="1000">
+                    <span class="tooltip">模型的参数总数，单位为亿</span>
+                </div>
+
+                <h2>💻 系统配置</h2>
+                
+                <div class="form-group">
+                    <label for="available-memory">可用内存 (GB):</label>
+                    <input type="number" id="available-memory" value="80" step="1" min="1">
+                    <span class="tooltip">GPU或系统可用内存大小</span>
+                </div>
+
+                <h2>💬 会话模式</h2>
+                
+                <div class="form-group">
+                    <label for="avg-conv-length">平均会话长度 (轮次):</label>
+                    <input type="number" id="avg-conv-length" value="5" step="0.1" min="1">
+                    <span class="tooltip">一个会话平均包含的轮次数</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="conv-arrival-rate">新会话到达率 (会话/秒):</label>
+                    <input type="number" id="conv-arrival-rate" value="2" step="0.1" min="0.1">
+                    <span class="tooltip">新会话开始的频率</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="within-conv-interval">会话内间隔 (秒):</label>
+                    <input type="number" id="within-conv-interval" value="30" step="1" min="1">
+                    <span class="tooltip">同一会话中相邻请求的平均时间间隔</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="avg-sequence-length">平均序列长度 (token):</label>
+                    <input type="number" id="avg-sequence-length" value="100" step="10" min="10">
+                    <span class="tooltip">每个请求的平均输入+输出token数</span>
+                </div>
+
+                <button id="calculate-btn" class="calculate-button">🔍 计算命中率</button>
+            </div>
+
+            <div class="results-section">
+                <h2>📈 计算结果</h2>
+                
+                <div class="result-cards">
+                    <div class="result-card highlight">
+                        <h3>命中率</h3>
+                        <div class="result-value" id="hit-rate">-</div>
+                        <div class="result-unit">%</div>
+                    </div>
+
+                    <div class="result-card">
+                        <h3>缓存利用率</h3>
+                        <div class="result-value" id="cache-utilization">-</div>
+                        <div class="result-unit">%</div>
+                    </div>
+
+                    <div class="result-card">
+                        <h3>延迟减少</h3>
+                        <div class="result-value" id="latency-reduction">-</div>
+                        <div class="result-unit">%</div>
+                    </div>
+
+                    <div class="result-card">
+                        <h3>缓存内存</h3>
+                        <div class="result-value" id="cache-memory">-</div>
+                        <div class="result-unit">GB</div>
+                    </div>
+                </div>
+
+                <div class="detailed-results">
+                    <h3>详细指标</h3>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <span class="metric-label">推导QPS:</span>
+                            <span class="metric-value" id="derived-qps">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">每Token内存:</span>
+                            <span class="metric-value" id="memory-per-token">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">最大缓存Token数:</span>
+                            <span class="metric-value" id="max-cached-tokens">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">活跃会话数:</span>
+                            <span class="metric-value" id="active-conversations">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">缓存命中数/秒:</span>
+                            <span class="metric-value" id="cache-hits-per-second">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">模型内存占用:</span>
+                            <span class="metric-value" id="model-memory">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">可缓存会话数:</span>
+                            <span class="metric-value" id="cached-conversations">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="hit-rate-chart"></canvas>
+                </div>
+
+                <div class="optimization-section">
+                    <h3>💡 优化建议</h3>
+                    <div id="optimization-results">
+                        <p>点击计算按钮获取优化建议</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="presets-section">
+            <h3>🎯 预设配置</h3>
+            <div class="preset-buttons">
+                <button class="preset-btn" onclick="loadPreset('llama2-7b')">Llama2-7B</button>
+                <button class="preset-btn" onclick="loadPreset('llama2-13b')">Llama2-13B</button>
+                <button class="preset-btn" onclick="loadPreset('chatglm-6b')">ChatGLM-6B</button>
+                <button class="preset-btn" onclick="loadPreset('fp8-optimized')">FP8优化</button>
+                <button class="preset-btn" onclick="loadPreset('custom-large')">大型模型</button>
+            </div>
+        </div>
+
+        <footer>
+            <p>💻 基于排队论等理论建模计算 | 实际效果可能因实现细节而异</p>
+        </footer>
+    </div>
+
+    <script src="calculator.js"></script>
+</body>
+</html> 
