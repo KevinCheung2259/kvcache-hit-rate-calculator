@@ -1,8 +1,13 @@
 # 🚀 KVCache 命中率计算器
 
-一个专门用于建模和计算LLM推理服务中KVCache命中率的工具，特别针对chatbot场景进行优化。
+## 🌐 在线使用
+**直接访问**: [https://KevinCheung2259.github.io/kvcache-hit-rate-calculator/](https://KevinCheung2259.github.io/kvcache-hit-rate-calculator/)
+
+> 将上面链接中的"你的用户名"替换为您的GitHub用户名
 
 ## 📋 功能特性
+
+用于计算LLM推理服务中KVCache的理论命中率。本工具基于排队论和缓存理论，提供准确的性能预测和优化建议。
 
 - 🎯 **精确建模**: 基于排队论和缓存理论的数学建模
 - 📊 **可视化界面**: 现代化Web界面，支持实时计算和图表展示
