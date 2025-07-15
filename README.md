@@ -3,8 +3,6 @@
 ## 🌐 在线使用
 **直接访问**: [https://KevinCheung2259.github.io/kvcache-hit-rate-calculator/](https://KevinCheung2259.github.io/kvcache-hit-rate-calculator/)
 
-> 将上面链接中的"你的用户名"替换为您的GitHub用户名
-
 ## 📋 功能特性
 
 用于计算LLM推理服务中KVCache的理论命中率。本工具基于排队论和缓存理论，提供准确的性能预测和优化建议。
@@ -35,7 +33,7 @@ kvcache-hit-rate-calculator/
 
 ### 方式1: Web界面 (推荐)
 
-1. 直接打开 `index.html` 文件
+1. 直接打开 [https://KevinCheung2259.github.io/kvcache-hit-rate-calculator/](https://KevinCheung2259.github.io/kvcache-hit-rate-calculator/) 
 2. 在浏览器中设置模型和系统参数
 3. 点击"计算命中率"按钮查看结果
 
