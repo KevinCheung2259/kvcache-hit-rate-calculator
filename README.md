@@ -12,7 +12,7 @@
 - 🔧 **参数化配置**: 支持模型层数、注意力头数、数据类型等多种参数
 - 💡 **优化建议**: 自动分析并提供内存配置优化建议
 - 📈 **敏感性分析**: 分析不同参数对命中率的影响
-- 🎨 **预设配置**: 内置主流模型配置（Llama2、ChatGLM等）
+- 🎨 **预设配置**: 内置主流模型配置（Mistral、Llama3、Qwen3等）
 
 ## 🏗️ 项目结构
 
@@ -138,7 +138,6 @@ derived_qps = conversation_arrival_rate × qps_per_conversation
 ```
 tokens_per_second = derived_qps × avg_sequence_length
 cache_hits_per_second = tokens_per_second × hit_rate
-estimated_latency_reduction = hit_rate × 0.3  # 假设减少30%
 ```
 
 ## 🔧 参数说明
@@ -206,17 +205,16 @@ metrics = calculator.calculate_detailed_metrics(
 
 print(f"KVCache命中率: {metrics['hit_rate']:.1%}")
 print(f"缓存利用率: {metrics['cache_utilization']:.1%}")
-print(f"预估延迟减少: {metrics['estimated_latency_reduction']:.1%}")
+print(f"系统QPS: {metrics['derived_qps']:.1f} req/s")
 ```
 
 ### 预设配置
 
 工具内置了常见模型的配置：
 
-- **Llama2-7B**: 32层, 32头, FP16
-- **Llama2-13B**: 40层, 40头, FP16  
-- **ChatGLM-6B**: 28层, 32头, FP16
-- **大型模型**: 80层, 64头, FP16
+- **Mistral-24B**: 40层, 8 KVHead, FP16
+- **Llama3-8B**: 32层, KVHead, FP16  
+- **Qwen3-32B**: 64层, 8 KVHead, FP16
 
 ## 🔍 理论背景
 
@@ -246,10 +244,9 @@ print(f"预估延迟减少: {metrics['estimated_latency_reduction']:.1%}")
 
 ### 假设条件
 
-- 平均序列长度可配置（默认100个token）
+- 平均序列长度可配置（默认1000个token）
 - LRU缓存替换策略
 - 模型运行时内存开销为模型大小的1.2倍
-- 缓存命中可减少30%的计算时间
 
 ## 📊 性能分析
 

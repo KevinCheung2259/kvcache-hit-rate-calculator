@@ -1,4 +1,4 @@
-// KVCache命中率计算器 JavaScript实现
+// KVCache Hit Rate Calculator JavaScript implementation
 
 class KVCacheCalculator {
     constructor() {
@@ -13,18 +13,18 @@ class KVCacheCalculator {
     }
 
     calculateModelMemoryGb(modelConfig) {
-        // 计算模型参数内存占用
-        // 模型内存 = 参数数量 × 数据类型字节数
+        // Calculate the memory occupied by model parameters
+        // Model memory = number of parameters × data type bytes
         const bytesPerParam = this.dtypeBytes[modelConfig.modelDtype];
         const modelMemoryBytes = modelConfig.numParams * bytesPerParam;
         const modelMemoryGb = modelMemoryBytes / (1024**3);
-        // 包含运行时开销，通常为1.2-1.5倍
+        // Includes runtime overhead, usually 1.2-1.5 times
         return modelMemoryGb * 1.3;
     }
 
     calculateKVCacheMemoryPerToken(modelConfig) {
-        // KVCache包含Key和Value，每层都有
-        // 内存 = 2 (K+V) * num_layers * num_kv_heads * head_dim * dtype_bytes
+        // KVCache contains Key and Value, each layer has
+        // Memory = 2 (K+V) * num_layers * num_kv_heads * head_dim * dtype_bytes
         const bytesPerElement = this.dtypeBytes[modelConfig.kvcacheDtype];
         const memoryPerToken = 2 * modelConfig.numLayers * 
                               modelConfig.numKvHeads * 
@@ -34,23 +34,23 @@ class KVCacheCalculator {
     }
 
     calculateDerivedQps(convPattern) {
-        // QPS = 每秒的请求数量，与token长度无关
-        // 基于Little's Law：
-        // 系统QPS = 会话到达率 × 平均会话长度（每个会话的请求数）
+        // QPS = number of requests per second, independent of token length
+        // Based on Little's Law:
+        // System QPS = conversation arrival rate × average conversation length (number of requests per conversation)
         const derivedQps = convPattern.conversationArrivalRate * convPattern.avgConversationLength;
         return derivedQps;
     }
 
     calculateMaxCachedTokens(modelConfig, systemConfig) {
-        // 计算最大可缓存的token数量
+        // Calculate the maximum number of tokens that can be cached
         const memoryPerToken = this.calculateKVCacheMemoryPerToken(modelConfig);
         
-        // 计算模型内存：参数数量 × 数据类型字节数
+        // Calculate model memory: number of parameters × data type bytes
         const bytesPerParam = this.dtypeBytes[modelConfig.modelDtype];
         const modelMemoryBytes = modelConfig.numParams * bytesPerParam;
-        const modelMemoryGb = (modelMemoryBytes / (1024**3)) * 1.3; // 包含运行时开销
+        const modelMemoryGb = (modelMemoryBytes / (1024**3)) * 1.3; // Includes runtime overhead
         
-        // 可用于KVCache的内存 = 总内存 - 模型内存
+        // Available memory for KVCache = total memory - model memory
         const availableForCache = (systemConfig.availableMemoryGb * 1024**3 - 
                                   modelMemoryGb * 1024**3);
         
@@ -63,7 +63,7 @@ class KVCacheCalculator {
     }
 
     calculateConversationHitRate(modelConfig, systemConfig, convPattern) {
-        // 计算会话级别的命中率
+        // Calculate the hit rate at the conversation level
         const maxCachedTokens = this.calculateMaxCachedTokens(modelConfig, systemConfig);
         
         if (maxCachedTokens <= 0) {
@@ -76,24 +76,24 @@ class KVCacheCalculator {
             };
         }
 
-        // 估算平均每个会话的token数
+        // Estimate the average number of tokens per conversation
         const avgTokensPerConversation = convPattern.avgConversationLength * convPattern.avgSequenceLength;
         
-        // 可以缓存的会话数量
+        // Number of conversations that can be cached
         const maxCachedConversations = maxCachedTokens / avgTokensPerConversation;
         
-        // 会话到达率和生存时间建模
+        // Model conversation arrival rate and survival time
         const conversationLifetime = convPattern.avgConversationLength * convPattern.withinConversationInterval;
         
-        // 使用Little's Law: 系统中的平均会话数 = 到达率 × 平均停留时间
+        // Using Little's Law: average number of conversations in the system = arrival rate × average stay time
         const activeConversations = convPattern.conversationArrivalRate * conversationLifetime;
         
         let hitRate;
         if (activeConversations <= maxCachedConversations) {
-            // 所有活跃会话都能被缓存
+            // All active conversations can be cached
             hitRate = 1.0 - (1.0 / convPattern.avgConversationLength);
         } else {
-            // 部分会话被缓存，使用概率模型
+            // Some conversations are cached, use probabilistic model
             const cacheRatio = maxCachedConversations / activeConversations;
             const intraConversationHit = 1.0 - (1.0 / convPattern.avgConversationLength);
             const interConversationHit = cacheRatio;
@@ -113,25 +113,21 @@ class KVCacheCalculator {
     }
 
     calculateDetailedMetrics(modelConfig, systemConfig, convPattern) {
-        // 计算详细的性能指标
+        // Calculate detailed performance metrics
         const basicMetrics = this.calculateConversationHitRate(modelConfig, systemConfig, convPattern);
         
-        // 计算内存使用详情
+        // Calculate memory usage details
         const memoryPerToken = this.calculateKVCacheMemoryPerToken(modelConfig);
         
-        // 计算模型内存：参数数量 × 数据类型字节数
+        // Calculate model memory: number of parameters × data type bytes
         const bytesPerParam = this.dtypeBytes[modelConfig.modelDtype];
         const modelMemoryBytes = modelConfig.numParams * bytesPerParam;
-        const modelMemoryGb = (modelMemoryBytes / (1024**3)) * 1.3; // 包含运行时开销
+        const modelMemoryGb = (modelMemoryBytes / (1024**3)) * 1.3; // Includes runtime overhead
         
-        // 计算性能提升 - QPS从会话参数推导
+        // Calculate performance improvement - QPS derived from conversation parameters
         const derivedQps = this.calculateDerivedQps(convPattern);
         const tokensPerSecond = derivedQps * convPattern.avgSequenceLength;
         const cacheHitsPerSecond = tokensPerSecond * basicMetrics.hitRate;
-        
-        // 估算延迟改善（缓存命中可以减少计算时间）
-        const computeReductionFactor = 0.3;  // 假设缓存命中减少30%计算时间
-        const avgLatencyReduction = basicMetrics.hitRate * computeReductionFactor;
         
         return {
             ...basicMetrics,
@@ -141,63 +137,48 @@ class KVCacheCalculator {
             derivedQps: derivedQps,
             tokensPerSecond: tokensPerSecond,
             cacheHitsPerSecond: cacheHitsPerSecond,
-            estimatedLatencyReduction: avgLatencyReduction,
+            derivedQpsForDisplay: derivedQps,
             memoryEfficiency: basicMetrics.cacheUtilization
         };
     }
 }
 
-// 全局计算器实例
+// Global calculator instance
 const calculator = new KVCacheCalculator();
 
-// 全局图表变量
+// Global chart variable
 let hitRateChart = null;
 
-// 预设配置
+// Preset configurations
 const presets = {
-    'llama2-7b': {
-        numLayers: 32,
-        numKvHeads: 32,
-        headDim: 128,
-        numParams: 7,  // 7B参数，单位亿
-        modelDtype: 'fp16',
-        kvcacheDtype: 'fp16'
-    },
-    'llama2-13b': {
+    'mistral-24B': {
         numLayers: 40,
-        numKvHeads: 40,
+        numKvHeads: 8,
         headDim: 128,
-        numParams: 13, // 13B参数，单位亿
+        numParams: 24,
         modelDtype: 'fp16',
         kvcacheDtype: 'fp16'
     },
-    'chatglm-6b': {
-        numLayers: 28,
-        numKvHeads: 2,
-        headDim: 128,
-        numParams: 6,  // 6B参数，单位亿
-        modelDtype: 'fp16',
-        kvcacheDtype: 'fp16'
-    },
-    'fp8-optimized': {
+    'llama3-8B': {
         numLayers: 32,
         numKvHeads: 32,
         headDim: 128,
-        numParams: 7,  // 7B参数，单位亿
-        modelDtype: 'fp8',
-        kvcacheDtype: 'fp8'
-    },
-    'custom-large': {
-        numLayers: 80,
-        numKvHeads: 64,
-        headDim: 128,
-        numParams: 70, // 70B参数，单位亿
+        numParams: 8, 
         modelDtype: 'fp16',
         kvcacheDtype: 'fp16'
-    }
+    },
+    'qwen3-32B': {
+        numLayers: 64,
+        numKvHeads: 8,
+        headDim: 128,
+        numParams: 32,
+        modelDtype: 'fp16',
+        kvcacheDtype: 'fp16'
+    },
+    
 };
 
-// 工具函数
+// Utility functions
 function formatBytes(bytes) {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -210,7 +191,7 @@ function formatNumber(num) {
     return num.toLocaleString();
 }
 
-// 加载预设配置
+// Load preset configurations
 function loadPreset(presetName) {
     const preset = presets[presetName];
     if (!preset) return;
@@ -222,11 +203,11 @@ function loadPreset(presetName) {
     document.getElementById('model-dtype').value = preset.modelDtype;
     document.getElementById('kvcache-dtype').value = preset.kvcacheDtype;
     
-    // 自动更新图表
+    // Automatically update the chart
     updateChart();
 }
 
-// 获取表单数据
+// Get form data
 function getFormData() {
     return {
         modelConfig: {
@@ -249,7 +230,7 @@ function getFormData() {
     };
 }
 
-// 主计算函数
+// Main calculation function
 function calculateHitRate() {
     try {
         const data = getFormData();
@@ -264,21 +245,18 @@ function calculateHitRate() {
         drawHitRateChart(); // 绘制图表
         
     } catch (error) {
-        console.error('计算错误:', error);
-        alert('计算出错: ' + error.message);
+        console.error('Calculation error:', error);
+        alert('Calculation error: ' + error.message);
     }
 }
 
-// 显示结果
+// Display results
 function displayResults(metrics) {
-    // 主要指标
+    // Main metrics
     document.getElementById('hit-rate').textContent = (metrics.hitRate * 100).toFixed(1);
     document.getElementById('cache-utilization').textContent = (metrics.cacheUtilization * 100).toFixed(1);
-    document.getElementById('latency-reduction').textContent = (metrics.estimatedLatencyReduction * 100).toFixed(1);
-    document.getElementById('cache-memory').textContent = metrics.cacheMemoryGb.toFixed(2);
-    
-    // 详细指标
     document.getElementById('derived-qps').textContent = metrics.derivedQps.toFixed(1);
+    document.getElementById('cache-memory').textContent = metrics.cacheMemoryGb.toFixed(2);
     document.getElementById('memory-per-token').textContent = formatBytes(metrics.memoryPerTokenBytes);
     document.getElementById('max-cached-tokens').textContent = formatNumber(metrics.maxCachedTokens);
     document.getElementById('active-conversations').textContent = metrics.activeConversations.toFixed(1);
@@ -287,23 +265,23 @@ function displayResults(metrics) {
     document.getElementById('cached-conversations').textContent = metrics.avgCachedConversations.toFixed(1);
 }
 
-// 绘制命中率-内存关系图表
+// Draw hit rate vs memory chart
 function drawHitRateChart() {
     const data = getFormData();
     const currentMemory = data.systemConfig.availableMemoryGb;
     
-    // 计算模型内存
+    // Calculate model memory
     const bytesPerParam = calculator.dtypeBytes[data.modelConfig.modelDtype];
     const modelMemoryBytes = data.modelConfig.numParams * bytesPerParam;
-    const modelMemoryGb = (modelMemoryBytes / (1024**3)) * 1.3; // 包含运行时开销
+    const modelMemoryGb = (modelMemoryBytes / (1024**3)) * 1.3; // Includes runtime overhead
     
-    // 生成内存范围（从模型内存的1.5倍到当前内存的3倍）
+    // Generate memory range (from 1.5x model memory to 3x current memory)
     const memoryRange = [];
     const hitRates = [];
     
     const minMemory = Math.max(modelMemoryGb * 1.5, currentMemory * 0.3);
     const maxMemory = currentMemory * 3;
-    const step = (maxMemory - minMemory) / 20; // 20个数据点
+    const step = (maxMemory - minMemory) / 20; // 20 data points
     
     for (let memory = minMemory; memory <= maxMemory; memory += step) {
         const testSystemConfig = { ...data.systemConfig, availableMemoryGb: memory };
@@ -317,22 +295,22 @@ function drawHitRateChart() {
         hitRates.push(metrics.hitRate * 100);
     }
     
-    // 获取图表canvas
+    // Get chart canvas
     const ctx = document.getElementById('hit-rate-chart').getContext('2d');
     
-    // 销毁之前的图表
+    // Destroy previous chart
     if (hitRateChart) {
         hitRateChart.destroy();
     }
     
-    // 创建新图表
+    // Create new chart
     hitRateChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: memoryRange.map(m => m.toFixed(0) + 'GB'),
             datasets: [
                 {
-                    label: '命中率 (%)',
+                    label: 'Hit Rate (%)',
                     data: hitRates,
                     borderColor: '#4CAF50',
                     backgroundColor: 'rgba(76, 175, 80, 0.1)',
@@ -354,7 +332,7 @@ function drawHitRateChart() {
             plugins: {
                 title: {
                     display: true,
-                    text: 'KVCache命中率随内存变化',
+                    text: 'KVCache Hit Rate vs Memory',
                     font: {
                         size: 16,
                         weight: 'bold'
@@ -369,7 +347,7 @@ function drawHitRateChart() {
                     display: true,
                     title: {
                         display: true,
-                        text: '可用内存 (GB)',
+                        text: 'Available Memory (GB)',
                         font: {
                             size: 14,
                             weight: 'bold'
@@ -380,7 +358,7 @@ function drawHitRateChart() {
                     display: true,
                     title: {
                         display: true,
-                        text: '命中率 (%)',
+                        text: 'Hit Rate (%)',
                         font: {
                             size: 14,
                             weight: 'bold'
@@ -394,7 +372,7 @@ function drawHitRateChart() {
     });
 }
 
-// 生成优化建议
+// Generate optimization tips
 function generateOptimizationTips(metrics, data) {
     const container = document.getElementById('optimization-results');
     let html = '';
@@ -402,7 +380,7 @@ function generateOptimizationTips(metrics, data) {
     if (metrics.hitRate < 0.5) {
         html += `
             <div class="optimization-tip warning">
-                ⚠️ 建议增加内存或优化会话模式以提高命中率
+                ⚠️ Consider increasing memory or decreasing conversation arrival rate to improve hit rate
             </div>
         `;
     }
@@ -410,7 +388,7 @@ function generateOptimizationTips(metrics, data) {
     if (metrics.cacheUtilization < 0.3) {
         html += `
             <div class="optimization-tip info">
-                💡 缓存利用率较低，考虑减少内存分配或增加负载
+                💡 Low cache utilization, consider reducing memory allocation or increasing load
             </div>
         `;
     }
@@ -418,7 +396,7 @@ function generateOptimizationTips(metrics, data) {
     if (data.modelConfig.kvcacheDtype === 'fp32' || data.modelConfig.kvcacheDtype === 'fp16') {
         html += `
             <div class="optimization-tip success">
-                🎯 考虑使用FP8量化来减少50-75%的内存使用量
+                🎯 Consider using FP8 quantization to reduce memory usage
             </div>
         `;
     }
@@ -426,24 +404,24 @@ function generateOptimizationTips(metrics, data) {
     if (metrics.activeConversations > metrics.avgCachedConversations * 2) {
         html += `
             <div class="optimization-tip warning">
-                📈 检测到高会话负载，考虑水平扩展
+                📈 High conversation load detected, consider horizontal scaling
             </div>
         `;
     }
     
     if (!html) {
-        html = '<p class="optimization-tip success">✅ 当前配置较为合理</p>';
+        html = '<p class="optimization-tip success">✅ Current configuration is reasonable</p>';
     }
     
     container.innerHTML = html;
 }
 
-// 初始化页面
+// Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
-    // 设置事件监听器
+    // Set event listeners
     document.getElementById('calculate-btn').addEventListener('click', calculateHitRate);
     
-    // 为所有输入框添加自动更新监听器
+    // Add auto-update listeners to all input fields
     const inputIds = [
         'num-layers', 'num-kv-heads', 'head-dim', 'num-params', 'model-dtype', 'kvcache-dtype', 
         'available-memory', 'avg-conv-length', 'conv-arrival-rate', 
@@ -454,7 +432,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const element = document.getElementById(id);
         if (element) {
             element.addEventListener('input', function() {
-                // 添加小延迟避免频繁更新
+                // Add a small delay to avoid frequent updates
                 clearTimeout(element.updateTimeout);
                 element.updateTimeout = setTimeout(() => {
                     updateChart();
@@ -463,11 +441,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // 默认加载Llama2-7B配置
-    loadPreset('llama2-7b');
+    // Default load mistral-24B configuration
+    loadPreset('mistral-24B');
 });
 
-// 自动更新所有内容（结果、指标、图表）
+// Automatically update all content (results, metrics, charts)
 function updateChart() {
     try {
         const data = getFormData();
@@ -481,6 +459,6 @@ function updateChart() {
         generateOptimizationTips(metrics, data);
         drawHitRateChart();
     } catch (error) {
-        console.error('更新内容错误:', error);
+        console.error('Update content error:', error);
     }
 } 

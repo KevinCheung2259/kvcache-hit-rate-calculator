@@ -79,7 +79,7 @@ def print_metrics(metrics, config_name):
     print(f"配置: {config_name}")
     print(f"  📈 KVCache命中率: {metrics['hit_rate']:.1%}")
     print(f"  💾 缓存利用率: {metrics['cache_utilization']:.1%}")
-    print(f"  ⚡ 预估延迟减少: {metrics['estimated_latency_reduction']:.1%}")
+    print(f"  🔄 系统QPS: {metrics['derived_qps']:.1f} req/s")
     print(f"  🗂️ 缓存内存占用: {metrics['cache_memory_gb']:.2f} GB")
     print(f"  🔢 每Token内存: {metrics['memory_per_token_bytes']:.0f} 字节")
     print(f"  💬 可缓存会话数: {metrics['avg_cached_conversations']:.1f}")
