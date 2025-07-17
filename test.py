@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """
-KVCache计算器简单测试脚本
+KVCache Calculator Full Test Suite
 """
 
 from kvcache_calculator import *
 
 def test_basic_functionality():
-    """测试基础功能"""
-    print("🧪 测试基础功能...")
+    """Test basic functionality"""
+    print("🧪 Test basic functionality...")
     
     calculator = KVCacheCalculator()
     
-    # 测试配置
+    # Test configuration - using Mistral-24B configuration
     model_config = ModelConfig(
-        num_layers=32,
+        num_layers=40,
         num_attention_heads=32,
-        num_kv_heads=32,
+        num_kv_heads=8,
         head_dim=128,
         model_dtype=ModelDtype.FP16,
         kvcache_dtype=KVCacheDtype.FP16,
-        model_size_gb=14.0
+        model_size_gb=48.0
     )
     
     system_config = SystemConfig(
@@ -30,68 +30,96 @@ def test_basic_functionality():
         avg_conversation_length=5.0,
         conversation_arrival_rate=2.0,
         within_conversation_interval=30.0,
-        avg_sequence_length=100
+        avg_sequence_length=1000
     )
     
-    # 测试内存计算
+    # Test memory calculation
     memory_per_token = calculator.calculate_kvcache_memory_per_token(model_config)
-    assert memory_per_token > 0, "每Token内存应该大于0"
-    print(f"  ✅ 每Token内存计算: {memory_per_token} 字节")
+    assert memory_per_token > 0, "Memory per token should be greater than 0"
+    print(f"  ✅ Memory per token calculation: {memory_per_token} bytes")
     
-    # 测试最大缓存Token数
+    # Test QPS calculation
+    derived_qps = calculator.calculate_derived_qps(conv_pattern)
+    expected_qps = conv_pattern.conversation_arrival_rate * conv_pattern.avg_conversation_length
+    assert abs(derived_qps - expected_qps) < 0.01, "QPS calculation error"
+    print(f"  ✅ QPS calculation: {derived_qps:.1f} req/s")
+    
+    # Test maximum cached tokens
     max_tokens = calculator.calculate_max_cached_tokens(model_config, system_config)
-    assert max_tokens > 0, "最大缓存Token数应该大于0"
-    print(f"  ✅ 最大缓存Token数: {max_tokens:,}")
+    assert max_tokens > 0, "Max cached tokens should be greater than 0"
+    print(f"  ✅ Max cached tokens: {max_tokens:,}")
     
-    # 测试命中率计算
-    metrics = calculator.calculate_conversation_hit_rate(model_config, system_config, conv_pattern)
-    assert 0 <= metrics['hit_rate'] <= 1, "命中率应该在0-1之间"
-    assert 0 <= metrics['cache_utilization'] <= 1, "缓存利用率应该在0-1之间"
-    print(f"  ✅ 命中率计算: {metrics['hit_rate']:.1%}")
-    print(f"  ✅ 缓存利用率: {metrics['cache_utilization']:.1%}")
+    # Test hit rate calculation
+    hit_rate_metrics = calculator.calculate_conversation_hit_rate(model_config, system_config, conv_pattern)
+    assert 0 <= hit_rate_metrics['hit_rate'] <= 1, "Hit rate should be between 0 and 1"
+    assert 0 <= hit_rate_metrics['cache_utilization'] <= 1, "Cache utilization should be between 0 and 1"
+    print(f"  ✅ Hit rate calculation: {hit_rate_metrics['hit_rate']:.1%}")
+    print(f"  ✅ Cache utilization: {hit_rate_metrics['cache_utilization']:.1%}")
     
-    # 测试优化建议
+    # Test detailed metrics calculation
+    detailed_metrics = calculator.calculate_detailed_metrics(model_config, system_config, conv_pattern)
+    required_fields = ['hit_rate', 'cache_utilization', 'derived_qps', 'tokens_per_second', 
+                      'cache_hits_per_second', 'memory_per_token_bytes', 'cache_memory_gb']
+    for field in required_fields:
+        assert field in detailed_metrics, f"Missing field: {field}"
+    print(f"  ✅ Detailed metrics calculation complete")
+    
+    # Test optimization suggestions
     optimization = calculator.optimize_memory_allocation(model_config, system_config, conv_pattern)
-    assert 'recommended_memory_gb' in optimization, "应包含内存推荐"
-    print(f"  ✅ 优化建议生成成功")
+    assert 'recommended_memory_gb' in optimization, "Should contain memory recommendation"
+    assert 'achievable' in optimization, "Should contain achievability judgment"
+    print(f"  ✅ Optimization suggestions generated successfully")
 
 def test_edge_cases():
-    """测试边界情况"""
-    print("🧪 测试边界情况...")
+    """Test edge cases"""
+    print("🧪 Test edge cases...")
     
     calculator = KVCacheCalculator()
     
-    # 测试内存不足的情况
-    model_config = ModelConfig(
-        num_layers=32,
-        num_attention_heads=32, 
-        num_kv_heads=32,
+    # Test memory shortage - using Qwen3-32B configuration but memory shortage
+    large_model_config = ModelConfig(
+        num_layers=64,
+        num_attention_heads=64,
+        num_kv_heads=8,
         head_dim=128,
         model_dtype=ModelDtype.FP16,
         kvcache_dtype=KVCacheDtype.FP16,
-        model_size_gb=100.0  # 很大的模型
+        model_size_gb=64.0  # 32B model
     )
     
-    system_config = SystemConfig(
-        available_memory_gb=80.0  # 内存不足
+    limited_system_config = SystemConfig(
+        available_memory_gb=80.0  # Memory shortage
     )
     
     conv_pattern = ConversationPattern(
-        avg_conversation_length=1.0,  # 最小会话长度
+        avg_conversation_length=1.0,  # Minimum conversation length
         conversation_arrival_rate=0.1,
         within_conversation_interval=1.0,
         avg_sequence_length=100
     )
     
-    max_tokens = calculator.calculate_max_cached_tokens(model_config, system_config)
-    print(f"  ✅ 内存不足情况处理正确: {max_tokens}")
+    max_tokens = calculator.calculate_max_cached_tokens(large_model_config, limited_system_config)
+    print(f"  ✅ Memory shortage handling: {max_tokens}")
     
-    metrics = calculator.calculate_conversation_hit_rate(model_config, system_config, conv_pattern)
-    print(f"  ✅ 内存不足时命中率: {metrics['hit_rate']}")
+    metrics = calculator.calculate_conversation_hit_rate(large_model_config, limited_system_config, conv_pattern)
+    print(f"  ✅ Hit rate when memory shortage: {metrics['hit_rate']:.1%}")
+    
+    # Test extreme high load
+    high_load_pattern = ConversationPattern(
+        avg_conversation_length=10.0,
+        conversation_arrival_rate=100.0,  # Extremely high arrival rate
+        within_conversation_interval=1.0,  # Extremely short interval
+        avg_sequence_length=2000
+    )
+    
+    high_load_metrics = calculator.calculate_conversation_hit_rate(
+        large_model_config, limited_system_config, high_load_pattern
+    )
+    print(f"  ✅ High load handling: {high_load_metrics['hit_rate']:.1%}")
 
 def test_different_dtypes():
-    """测试不同数据类型"""
-    print("🧪 测试不同数据类型...")
+    """Test different data types"""
+    print("🧪 Test different data types...")
     
     calculator = KVCacheCalculator()
     
@@ -102,13 +130,14 @@ def test_different_dtypes():
         head_dim=128,
         model_dtype=ModelDtype.FP16,
         kvcache_dtype=KVCacheDtype.FP16,
-        model_size_gb=14.0
+        model_size_gb=16.0
     )
     
+    # 测试剩余的数据类型（移除FP8）
     dtypes_to_test = [
         KVCacheDtype.FP32,
         KVCacheDtype.FP16,
-        KVCacheDtype.FP8,
+        KVCacheDtype.BF16,
         KVCacheDtype.INT8,
     ]
     
@@ -124,31 +153,70 @@ def test_different_dtypes():
         )
         
         memory_per_token = calculator.calculate_kvcache_memory_per_token(config)
-        print(f"  ✅ {dtype.value}: {memory_per_token:,} 字节/Token")
+        print(f"  ✅ {dtype.value}: {memory_per_token:,} bytes/token")
+
+def test_optimization_scenarios():
+    """Test optimization scenarios"""
+    print("🧪 Test optimization scenarios...")
+    
+    calculator = KVCacheCalculator()
+    
+    # Test configuration
+    model_config = ModelConfig(
+        num_layers=32,
+        num_attention_heads=32,
+        num_kv_heads=32,
+        head_dim=128,
+        model_dtype=ModelDtype.FP16,
+        kvcache_dtype=KVCacheDtype.FP16,
+        model_size_gb=16.0
+    )
+    
+    system_config = SystemConfig(available_memory_gb=80.0)
+    conv_pattern = ConversationPattern(
+        avg_conversation_length=5.0,
+        conversation_arrival_rate=2.0,
+        within_conversation_interval=30.0,
+        avg_sequence_length=1000
+    )
+    
+    # Test different target hit rates
+    target_rates = [0.5, 0.7, 0.8, 0.9, 0.95]
+    
+    for target_rate in target_rates:
+        optimization = calculator.optimize_memory_allocation(
+            model_config, system_config, conv_pattern, target_hit_rate=target_rate
+        )
+        print(f"  ✅ Target hit rate {target_rate:.0%}: Recommended memory {optimization['recommended_memory_gb']:.1f} GB")
 
 def run_all_tests():
-    """运行所有测试"""
-    print("🚀 KVCache计算器测试开始")
+    """Run all tests"""
+    print("🚀 KVCache Calculator Test Start")
     print("=" * 50)
     
     try:
         test_basic_functionality()
-        print("✅ 基础功能测试通过\n")
+        print("✅ Basic functionality test passed\n")
         
         test_edge_cases()
-        print("✅ 边界情况测试通过\n")
+        print("✅ Edge cases test passed\n")
         
         test_different_dtypes()
-        print("✅ 数据类型测试通过\n")
+        print("✅ Data types test passed\n")
+        
+        test_optimization_scenarios()
+        print("✅ Optimization scenarios test passed\n")
         
         print("=" * 50)
-        passed_tests = 3
-        total_tests = 3
-        print(f"📊 测试结果: {passed_tests}/{total_tests} 通过")
-        print("🎉 所有测试通过！计算器功能正常")
+        passed_tests = 4
+        total_tests = 4
+        print(f"📊 Test results: {passed_tests}/{total_tests} passed")
+        print("🎉 All tests passed! Calculator functionality is normal")
         
     except Exception as e:
-        print(f"❌ 测试失败: {e}")
+        print(f"❌ Test failed: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 if __name__ == "__main__":
